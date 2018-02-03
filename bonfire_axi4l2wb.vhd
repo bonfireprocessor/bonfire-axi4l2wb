@@ -70,8 +70,8 @@ end bonfire_axi4l2wb;
 architecture Behavioral of bonfire_axi4l2wb is
 
 
-signal read_taken : std_logic:='0';
-signal write_taken : std_logic:='0';
+signal ar_taken : std_logic:='0';
+signal aw_taken : std_logic:='0';
 
 --signal wb_address : std_logic_vector(wb_addr_o'range);
 signal axi_wr_adr : std_logic_vector(wb_addr_o'range);
@@ -104,35 +104,31 @@ begin
    S_AXI_RRESP <= "00";
 
 
-    S_AXI_AWREADY <= not write_taken;
-    S_AXI_ARREADY <= not read_taken;
-
-
-
-
+    S_AXI_AWREADY <= not aw_taken;
+    S_AXI_ARREADY <= not ar_taken;
 
     achannels: process(S_AXI_ACLK)
     begin
        if rising_edge(S_AXI_ACLK) then
          if S_AXI_ARESETN='0' then
-            write_taken <= '0';
-            read_taken <= '0';
+            aw_taken <= '0';
+            ar_taken <= '0';
          elsif stb='1' then
            if wb_ack_i='1' then
              if we='1' then
-               write_taken<='0';
+               aw_taken<='0';
              else
-               read_taken<='0';
+               ar_taken<='0';
              end if;
            end if;
          else
-           if  S_AXI_AWVALID='1' and write_taken='0' then
-             write_taken <= '1';
+           if  S_AXI_AWVALID='1' and aw_taken='0' then
+             aw_taken <= '1';
              axi_wr_adr <= S_AXI_AWADDR(wb_addr_o'high downto wb_addr_o'low);
            end if;
 
-           if S_AXI_ARVALID='1' and read_taken='0' then
-             read_taken <= '1';
+           if S_AXI_ARVALID='1' and ar_taken='0' then
+             ar_taken <= '1';
              axi_rd_adr <= S_AXI_ARADDR(wb_addr_o'high downto wb_addr_o'low);
            end if;
          end if;
@@ -141,7 +137,7 @@ begin
     end process;
 
 
-  axi_wready <= '1' when write_taken='1' and state=s_idle
+  axi_wready <= '1' when aw_taken='1' and state=s_idle
                   else '0';
 
 
@@ -183,13 +179,13 @@ begin
            when s_idle =>
              S_AXI_BVALID <= '0';
              -- process AXI address phase
-             if  S_AXI_ARVALID='1' or read_taken='1' then
+             if  S_AXI_ARVALID='1' or ar_taken='1' then
                stb <= '1';
                we <= '0';
                sel <= (others=> '1');
                state <= s_read;
 
-             elsif write_taken='1' then
+             elsif aw_taken='1' then
                if S_AXI_WVALID='1' then
                  sel <= S_AXI_WSTRB;
                  wb_dat_o <= S_AXI_WDATA;

@@ -30,7 +30,7 @@ USE ieee.std_logic_1164.ALL;
 
 -- Uncomment the following library declaration if using
 -- arithmetic functions with Signed or Unsigned values
---USE ieee.numeric_std.ALL;
+USE ieee.numeric_std.ALL;
 
 LIBRARY std;
 USE std.textio.all;
@@ -114,6 +114,9 @@ ARCHITECTURE behavior OF tb_axi4_wishbone IS
    -- Clock period definitions
    constant S_AXI_ACLK_period : time := 10 ns;
 
+   subtype t_address is std_logic_vector(31 downto 0);
+   subtype t_data is std_logic_vector(S_AXI_WDATA'range);
+
 BEGIN
 
     -- Instantiate the Unit Under Test (UUT)
@@ -160,16 +163,52 @@ BEGIN
 
    -- Wishbone dummy cycle termination
    wb_ack_i <= wb_cyc_o and wb_stb_o;
-   
+
    wb_dat_i <= X"AA55AA11" when wb_cyc_o='1' and wb_we_o='0'
                else (others=>'U');
 
 
+   process
+   begin
+
+     wait until rising_edge(S_AXI_ACLK);
+     if wb_ack_i='1' and wb_cyc_o='1' then
+       if wb_we_o='1' then
+         print(OUTPUT,"WB Write to Adresss: " & hstr(wb_addr_o) & " Data: " & hstr(wb_dat_o) );
+       else
+         print(OUTPUT,"WB read from Adresss: " & hstr(wb_addr_o) & " Data: " & hstr(wb_dat_i) );
+       end if;
+     end if;
+
+   end process;
+
 
    -- Stimulus process
    stim_proc: process
-   variable wrdy,awrdy : boolean;
+   variable wrdy,awrdy,bvalid : boolean;
    variable rvalid,arrdy : boolean;
+   variable t: t_data;
+
+   procedure start_write(adr: t_address;data : t_data) is
+   begin
+
+      S_AXI_AWADDR <= adr(S_AXI_AWADDR'range);
+      S_AXI_AWVALID <= '1';
+      S_AXI_WDATA  <= data;
+      S_AXI_WSTRB <= (others => '1');
+      S_AXI_WVALID <= '1';
+      S_AXI_BREADY <= '1';
+   end procedure;
+
+
+   procedure start_read(adr: t_address) is
+   begin
+     S_AXI_ARADDR <= adr(S_AXI_ARADDR'range);
+     S_AXI_ARVALID <= '1';
+     S_AXI_RREADY <= '1';
+
+   end procedure;
+
    begin
       -- hold reset state for 100 ns.
 
@@ -178,42 +217,39 @@ BEGIN
 
       -- Write cycle test
       wait until rising_edge(S_AXI_ACLK);
-      S_AXI_AWADDR <= (others =>'0');
-      S_AXI_AWVALID <= '1';
+      start_write((others =>'0'), X"55AAFF55");
 
-      S_AXI_WDATA  <= X"55AAFF55";
-      S_AXI_WSTRB <= (others => '1');
-      S_AXI_WVALID <= '1';
-      S_AXI_BREADY <= '1';
       wait until rising_edge(S_AXI_ACLK);
-      wrdy := false; awrdy := false;
-      while not wrdy or not awrdy loop
+      wrdy := false; awrdy := false; bvalid:=false;
+      while not wrdy or not awrdy or not bvalid loop
         if S_AXI_AWREADY='1' then
            S_AXI_AWVALID <= '0';
+           print(OUTPUT,"AW Phase OK");
            awrdy := true;
         end if;
         if S_AXI_WREADY='1' then
            S_AXI_WVALID <= '0';
            wrdy := true;
+          print(OUTPUT,"Write Phase OK");
+        end if;
+        if S_AXI_BVALID='1' then
+          print(OUTPUT,"WRITE RESPONSE OK");
+          bvalid:=true;
         end if;
         wait until rising_edge(S_AXI_ACLK);
       end loop;
 
-      while S_AXI_BVALID='0' loop
-         wait until rising_edge(S_AXI_ACLK);
-      end loop;
 
       -- Read Test
 
-      S_AXI_ARADDR <= (others=>'0');
-      S_AXI_ARVALID <= '1';
-      S_AXI_RREADY <= '1';
+      start_read((others=>'0'));
       wait until rising_edge(S_AXI_ACLK);
       rvalid:=false; arrdy:=false;
       while not rvalid or not arrdy loop
         if S_AXI_ARREADY='1' then
           S_AXI_ARVALID<='0';
           arrdy := true;
+          print(OUTPUT,"AR Phase OK");
         end if;
         if S_AXI_RVALID='1' then
           print(OUTPUT,"Read data: " & hstr(S_AXI_RDATA));
@@ -224,7 +260,66 @@ BEGIN
       end loop;
 
 
+     -- Test Read and write together
+     print(OUTPUT,"Overlapping R/W");
+     start_write((others =>'0'), X"55AAFF55");
+     start_read((others=>'0'));
+     wait until rising_edge(S_AXI_ACLK);
+     rvalid:=false; arrdy:=false;
+     wrdy := false; awrdy := false; bvalid:=false;
+     while not wrdy or not awrdy or not rvalid or not arrdy  or not bvalid loop
+        if S_AXI_AWREADY='1' then
+           S_AXI_AWVALID <= '0';
+           awrdy := true;
+           print(OUTPUT,"AW Phase OK");
+        end if;
+        if S_AXI_WREADY='1' then
+           S_AXI_WVALID <= '0';
+           print(OUTPUT,"Write Phase OK");
+           wrdy := true;
+        end if;
+        if S_AXI_ARREADY='1' then
+          S_AXI_ARVALID<='0';
+          arrdy := true;
+          print(OUTPUT,"AR Phase OK");
+        end if;
+        if S_AXI_RVALID='1' then
+          print(OUTPUT,"Read data: " & hstr(S_AXI_RDATA));
+          rvalid:=true;
+          S_AXI_RREADY <= '0';
+        end if;
+        if S_AXI_BVALID='1' then
+          print(OUTPUT,"WRITE RESPONSE OK");
+          bvalid:=true;
+        end if;
+        wait until rising_edge(S_AXI_ACLK);
+      end loop;
 
+      -- Pipelined write
+
+      for i in 0 to 5 loop
+        t:=std_logic_vector(to_unsigned(i,t'length) sll 2 );
+        start_write(t,t);
+        wait until rising_edge(S_AXI_ACLK);
+        wrdy := false; awrdy := false;
+        while not wrdy or not awrdy loop
+          if S_AXI_AWREADY='1' then
+             S_AXI_AWVALID <= '0';
+             print(OUTPUT,"AW Phase OK");
+             awrdy := true;
+          end if;
+          if S_AXI_WREADY='1' then
+            S_AXI_WVALID <= '0';
+            wrdy := true;
+            print(OUTPUT,"Write Phase OK");
+          end if;
+        --if S_AXI_BVALID='1' then
+          --print(OUTPUT,"WRITE RESPONSE OK");
+          --bvalid:=true;
+        --end if;
+          wait until rising_edge(S_AXI_ACLK);
+        end loop;
+      end loop;
 
 
       report "Finished";
