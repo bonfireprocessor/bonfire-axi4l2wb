@@ -160,6 +160,9 @@ BEGIN
 
    -- Wishbone dummy cycle termination
    wb_ack_i <= wb_cyc_o and wb_stb_o;
+   
+   wb_dat_i <= X"AA55AA11" when wb_cyc_o='1' and wb_we_o='0'
+               else (others=>'U');
 
 
 

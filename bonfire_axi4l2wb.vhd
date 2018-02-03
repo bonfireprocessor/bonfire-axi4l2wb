@@ -73,13 +73,16 @@ architecture Behavioral of bonfire_axi4l2wb is
 signal read_taken : std_logic:='0';
 signal write_taken : std_logic:='0';
 
-signal wb_address : std_logic_vector(wb_addr_o'range);
+--signal wb_address : std_logic_vector(wb_addr_o'range);
 signal axi_wr_adr : std_logic_vector(wb_addr_o'range);
 signal axi_rd_adr : std_logic_vector(wb_addr_o'range);
 
 signal we : std_logic := '0';
 signal stb : std_logic := '0';
 signal sel : std_logic_vector(3 downto 0) := (others=>'0');
+
+signal read_buffer : std_logic_vector(wb_dat_o'range);
+signal axi_wready : std_logic;
 
 type t_state is (s_idle,s_read,s_write,s_write_response,s_write_finish,s_read_finish);
 signal state : t_state := s_idle;
@@ -88,11 +91,14 @@ begin
 
    wb_clk_o <= S_AXI_ACLK;
    wb_rst_o <= not S_AXI_ARESETN;
-   wb_addr_o <= wb_address;
+
+   wb_addr_o <= axi_wr_adr when stb='1' and we='1' else
+                axi_rd_adr when stb='1' and we='0' else (others=>'X');
+
    wb_stb_o <= stb;
    wb_cyc_o <= stb;
    wb_sel_o <= sel;
-   wb_we_o <= we;
+   wb_we_o <=  we;
 
    S_AXI_BRESP <= "00";
    S_AXI_RRESP <= "00";
@@ -100,6 +106,10 @@ begin
 
     S_AXI_AWREADY <= not write_taken;
     S_AXI_ARREADY <= not read_taken;
+
+
+
+
 
     achannels: process(S_AXI_ACLK)
     begin
@@ -113,17 +123,17 @@ begin
                write_taken<='0';
              else
                read_taken<='0';
-             end if;  
+             end if;
            end if;
          else
            if  S_AXI_AWVALID='1' and write_taken='0' then
              write_taken <= '1';
-             axi_wr_adr <= S_AXI_AWADDR(wb_address'high downto wb_address'low);
+             axi_wr_adr <= S_AXI_AWADDR(wb_addr_o'high downto wb_addr_o'low);
            end if;
 
            if S_AXI_ARVALID='1' and read_taken='0' then
              read_taken <= '1';
-             axi_rd_adr <= S_AXI_ARADDR(wb_address'high downto wb_address'low);
+             axi_rd_adr <= S_AXI_ARADDR(wb_addr_o'high downto wb_addr_o'low);
            end if;
          end if;
        end if;
@@ -131,11 +141,31 @@ begin
     end process;
 
 
-  S_AXI_WREADY <= '1' when write_taken='1' and state=s_idle
+  axi_wready <= '1' when write_taken='1' and state=s_idle
                   else '0';
 
-  wb_address <= axi_wr_adr when stb='1' and we='1' else
-                axi_rd_adr when stb='1' and we='0' else (others=>'X');
+
+  S_AXI_WREADY <= axi_wready;
+
+
+  read_response: process(state,wb_ack_i,S_AXI_RREADY,wb_dat_i,read_buffer)
+  begin
+
+    S_AXI_RVALID <= '0';
+    S_AXI_RDATA <= (others=>'X'); -- don't care...
+    if S_AXI_RREADY='1' then
+      if  (state=s_read and wb_ack_i='1')then
+        S_AXI_RVALID <= '1';
+        S_AXI_RDATA <= wb_dat_i;
+      elsif state=s_read_finish then
+        S_AXI_RVALID <= '1';
+        S_AXI_RDATA <= read_buffer;
+      end if;
+    end if;
+
+  end process;
+
+
 
   -- AXI State machine
   process(S_AXI_ACLK)
@@ -146,16 +176,14 @@ begin
          we <= '0';
          stb <= '0';
          sel <= (others=>'0');
-        
+
          S_AXI_BVALID <= '0';
-         S_AXI_RVALID <= '0';
        else
          case state is
            when s_idle =>
              S_AXI_BVALID <= '0';
-             S_AXI_RVALID <= '0';
              -- process AXI address phase
-             if read_taken='1' then
+             if  S_AXI_ARVALID='1' or read_taken='1' then
                stb <= '1';
                we <= '0';
                sel <= (others=> '1');
@@ -201,19 +229,19 @@ begin
 
            when s_read =>
              if wb_ack_i='1' then
-               S_AXI_RDATA <= wb_dat_i;
                stb <= '0';
-               S_AXI_RVALID <= '1';
+               -- when AXI side is ready we can terminate AXI cycle now
                if S_AXI_RREADY='1' then
                  state <= s_idle;
                else
+                 -- otherwise we must wait
                  state <= s_read_finish;
+                 read_buffer <= wb_dat_i;
                end if;
              end if;
            when s_read_finish =>
              if S_AXI_RREADY='1' then
                state <= s_idle;
-               S_AXI_RVALID <= '0';
              end if;
          end case;
        end if;
