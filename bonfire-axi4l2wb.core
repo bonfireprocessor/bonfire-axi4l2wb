@@ -1,0 +1,25 @@
+CAPI=1
+[main]
+name = ::bonfire-axi4l2wb:0
+depend = ::bonfire-util:0
+backend = ise
+simulators=ghdl isim
+
+[fileset rtl]
+files = bonfire_axi4l2wb.vhd
+file_type=vhdlSource
+
+
+[fileset sim]
+file_type=vhdlSource
+scope = private
+
+[ise]
+family = spartan6
+device = xc6slx9
+package = tqg144
+speed = -2
+top_module = bonfire_axi4l2wb
+
+;[simulator]
+;toplevel = tb_bonfire_soc_io
