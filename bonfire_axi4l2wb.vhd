@@ -69,10 +69,14 @@ end bonfire_axi4l2wb;
 
 architecture Behavioral of bonfire_axi4l2wb is
 
-signal axi_wready : std_logic := '0';
-signal read_taken, write_taken : std_logic;
+
+signal read_taken : std_logic:='0';
+signal write_taken : std_logic:='0';
 
 signal wb_address : std_logic_vector(wb_addr_o'range);
+signal axi_wr_adr : std_logic_vector(wb_addr_o'range);
+signal axi_rd_adr : std_logic_vector(wb_addr_o'range);
+
 signal we : std_logic := '0';
 signal stb : std_logic := '0';
 signal sel : std_logic_vector(3 downto 0) := (others=>'0');
@@ -92,29 +96,46 @@ begin
 
    S_AXI_BRESP <= "00";
    S_AXI_RRESP <= "00";
-  
 
 
+    S_AXI_AWREADY <= not write_taken;
+    S_AXI_ARREADY <= not read_taken;
 
-   -- Implement "Valid with Ready handshake" as in Figure 3.3 of the AXI SPEC
-   -- The "*taken" signals will be active for one clock only, because
-   -- the master should deassert *VALID after *READY becomes true
-   chan_arbiter:  process (S_AXI_AWVALID,S_AXI_ARVALID,state) begin
+    achannels: process(S_AXI_ACLK)
+    begin
+       if rising_edge(S_AXI_ACLK) then
+         if S_AXI_ARESETN='0' then
+            write_taken <= '0';
+            read_taken <= '0';
+         elsif stb='1' then
+           if wb_ack_i='1' then
+             if we='1' then
+               write_taken<='0';
+             else
+               read_taken<='0';
+             end if;  
+           end if;
+         else
+           if  S_AXI_AWVALID='1' and write_taken='0' then
+             write_taken <= '1';
+             axi_wr_adr <= S_AXI_AWADDR(wb_address'high downto wb_address'low);
+           end if;
 
-    read_taken <= '0';
-    write_taken <= '0';
-    if state=s_idle then
-      if S_AXI_AWVALID='1' then  -- Assume write has prio over read
-         write_taken <= '1';
-      elsif S_AXI_ARVALID='1' then
-         read_taken <= '1';
-      end if;
-    end if;
-  end process;
+           if S_AXI_ARVALID='1' and read_taken='0' then
+             read_taken <= '1';
+             axi_rd_adr <= S_AXI_ARADDR(wb_address'high downto wb_address'low);
+           end if;
+         end if;
+       end if;
 
-  S_AXI_AWREADY <= write_taken;
-  S_AXI_ARREADY <= read_taken;
-  S_AXI_WREADY <= axi_wready or write_taken;
+    end process;
+
+
+  S_AXI_WREADY <= '1' when write_taken='1' and state=s_idle
+                  else '0';
+
+  wb_address <= axi_wr_adr when stb='1' and we='1' else
+                axi_rd_adr when stb='1' and we='0' else (others=>'X');
 
   -- AXI State machine
   process(S_AXI_ACLK)
@@ -125,7 +146,7 @@ begin
          we <= '0';
          stb <= '0';
          sel <= (others=>'0');
-         axi_wready <= '0';
+        
          S_AXI_BVALID <= '0';
          S_AXI_RVALID <= '0';
        else
@@ -135,25 +156,21 @@ begin
              S_AXI_RVALID <= '0';
              -- process AXI address phase
              if read_taken='1' then
-               wb_address <= S_AXI_ARADDR(wb_address'high downto wb_address'low);
                stb <= '1';
                we <= '0';
                sel <= (others=> '1');
                state <= s_read;
 
              elsif write_taken='1' then
-               wb_address <= S_AXI_AWADDR(wb_address'high downto wb_address'low);
                if S_AXI_WVALID='1' then
                  sel <= S_AXI_WSTRB;
                  wb_dat_o <= S_AXI_WDATA;
                  stb <= '1';
                  we <= '1';
                  state <= s_write_response;
-                 axi_wready <='0';
-               else 
-                 -- when no valid write channel yet, wait for it                
+               else
+                 -- when no valid write channel yet, wait for it
                  state <= s_write;
-                 axi_wready <= '1';
                end if;
              end if;
 
@@ -164,7 +181,6 @@ begin
                stb <= '1';
                we <= '1';
                state <= s_write_response;
-               axi_wready <='0';
              end if;
            when s_write_response =>
              if wb_ack_i = '1' then

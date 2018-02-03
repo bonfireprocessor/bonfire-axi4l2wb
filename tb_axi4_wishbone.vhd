@@ -32,6 +32,10 @@ USE ieee.std_logic_1164.ALL;
 -- arithmetic functions with Signed or Unsigned values
 --USE ieee.numeric_std.ALL;
 
+LIBRARY std;
+USE std.textio.all;
+use work.txt_util.all;
+
 ENTITY tb_axi4_wishbone IS
 END tb_axi4_wishbone;
 
@@ -162,6 +166,7 @@ BEGIN
    -- Stimulus process
    stim_proc: process
    variable wrdy,awrdy : boolean;
+   variable rvalid,arrdy : boolean;
    begin
       -- hold reset state for 100 ns.
 
@@ -172,6 +177,7 @@ BEGIN
       wait until rising_edge(S_AXI_ACLK);
       S_AXI_AWADDR <= (others =>'0');
       S_AXI_AWVALID <= '1';
+
       S_AXI_WDATA  <= X"55AAFF55";
       S_AXI_WSTRB <= (others => '1');
       S_AXI_WVALID <= '1';
@@ -189,10 +195,35 @@ BEGIN
         end if;
         wait until rising_edge(S_AXI_ACLK);
       end loop;
-      
+
       while S_AXI_BVALID='0' loop
          wait until rising_edge(S_AXI_ACLK);
       end loop;
+
+      -- Read Test
+
+      S_AXI_ARADDR <= (others=>'0');
+      S_AXI_ARVALID <= '1';
+      S_AXI_RREADY <= '1';
+      wait until rising_edge(S_AXI_ACLK);
+      rvalid:=false; arrdy:=false;
+      while not rvalid or not arrdy loop
+        if S_AXI_ARREADY='1' then
+          S_AXI_ARVALID<='0';
+          arrdy := true;
+        end if;
+        if S_AXI_RVALID='1' then
+          print(OUTPUT,"Read data: " & hstr(S_AXI_RDATA));
+          rvalid:=true;
+          S_AXI_RREADY <= '0';
+        end if;
+        wait until rising_edge(S_AXI_ACLK);
+      end loop;
+
+
+
+
+
       report "Finished";
 
 
