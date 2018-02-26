@@ -69,6 +69,25 @@ end bonfire_axi4l2wb;
 
 architecture Behavioral of bonfire_axi4l2wb is
 
+-- Attribute Infos for Xilinx Vivado IP Integrator Block designs
+-- Should not have negative influence on other platforms. 
+
+ATTRIBUTE X_INTERFACE_INFO : STRING;
+ATTRIBUTE X_INTERFACE_INFO of  wb_clk_o : SIGNAL is "xilinx.com:signal:clock:1.0 wb_clk_o CLK";
+--ATTRIBUTE X_INTERFACE_INFO of  rst_i : SIGNAL is "xilinx.com:signal:reset:1.0 rst_i RESET";
+
+ATTRIBUTE X_INTERFACE_PARAMETER : STRING;
+ATTRIBUTE X_INTERFACE_PARAMETER of wb_clk_o : SIGNAL is "ASSOCIATED_BUSIF WB_MASTER";
+--ATTRIBUTE X_INTERFACE_PARAMETER of rst_i : SIGNAL is "ASSOCIATED_BUSIF WB_DB";
+
+ATTRIBUTE X_INTERFACE_INFO OF wb_cyc_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_cyc_o";
+ATTRIBUTE X_INTERFACE_INFO OF wb_stb_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_stb_o";
+ATTRIBUTE X_INTERFACE_INFO OF wb_we_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0  WB_MASTER wb_dbus_we_o";
+ATTRIBUTE X_INTERFACE_INFO OF wb_ack_i: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_ack_i";
+ATTRIBUTE X_INTERFACE_INFO OF wb_addr_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_adr_o";
+ATTRIBUTE X_INTERFACE_INFO OF wb_dat_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_dat_o";
+ATTRIBUTE X_INTERFACE_INFO OF wb_dat_i: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_dat_i";
+
 
 signal ar_taken : std_logic:='0';
 signal aw_taken : std_logic:='0';
