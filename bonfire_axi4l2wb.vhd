@@ -235,26 +235,6 @@ begin
          case state is
            when s_idle =>
              process_adr_phase;
---             S_AXI_BVALID <= '0';
---             -- process AXI address phase
---             if  S_AXI_ARVALID='1' or ar_taken='1' then
---               stb <= '1';
---               we <= '0';
---               sel <= (others=> '1');
---               state <= s_read;
-
---             elsif aw_taken='1' then
---               if S_AXI_WVALID='1' then
---                 sel <= S_AXI_WSTRB;
---                 wb_dat_o <= S_AXI_WDATA;
---                 stb <= '1';
---                 we <= '1';
---                 state <= s_write_response;
---               else
---                 -- when no valid write channel yet, wait for it
---                 state <= s_write;
---               end if;
---             end if;
 
            when s_write => -- process "delayed" write channel
              if S_AXI_WVALID='1' then
