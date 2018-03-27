@@ -13,6 +13,7 @@ file_type=vhdlSource
 [fileset sim]
 file_type=vhdlSource
 scope = private
+files = tb_axi4_wishbone.vhd
 
 [ise]
 family = spartan6
@@ -21,5 +22,5 @@ package = tqg144
 speed = -2
 top_module = bonfire_axi4l2wb
 
-;[simulator]
-;toplevel = tb_bonfire_soc_io
+[simulator]
+toplevel = tb_axi4_wishbone

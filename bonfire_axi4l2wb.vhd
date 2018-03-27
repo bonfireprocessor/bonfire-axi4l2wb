@@ -7,6 +7,16 @@
 
 -- License: See LICENSE or LICENSE.txt File in git project root.
 --
+-- Generics:
+--     ADRWIDTH  : integer := 15; 
+--     Width of the AXI Address Bus, the Wishbone Adr- Bus coresponds with it, but without the lowest adress bits
+--     FAST_READ_TERM : boolean := TRUE 
+--      When TRUE it  allows AXI read termination in same cycle as wb_ack_i is raised (in case RRREADY is asserted)
+--      which leads to a AXI4 read cycle latency of two clocks in best case
+--      when FALSE the Wishbone data are always registered and the AXI4 cycle is terminated earliest one clock after
+--      wb_ack_i. This leads to a minimum AXI4 read latency of three cycles but saves a 32 Bit Mux and
+--      avoids a long combinatorical data path
+
 ----------------------------------------------------------------------------------
 
 library IEEE;
@@ -16,8 +26,9 @@ library work;
 entity bonfire_axi4l2wb is
 
 generic (
-    ADRWIDTH  : integer := 15;
-    DATAWIDTH : integer := 32);
+    ADRWIDTH  : integer := 15; -- Width of the AXI Address Bus, the Wishbone Adr- Bus coresponds with it, but without the lowest adress bits
+    FAST_READ_TERM : boolean := TRUE -- TRUE: Allows AXI read termination in same cycle as 
+    );
 
   port (
     ---------------------------------------------------------------------------
@@ -156,7 +167,7 @@ begin
     end process;
 
 
-  axi_wready <= '1' when aw_taken='1' and state=s_idle
+  axi_wready <= '1' when aw_taken='1' and (state=s_idle or state=s_read_finish)
                   else '0';
 
 
@@ -168,15 +179,15 @@ begin
 
     S_AXI_RVALID <= '0';
     S_AXI_RDATA <= (others=>'X'); -- don't care...
-    if S_AXI_RREADY='1' then
-      if  (state=s_read and wb_ack_i='1')then
-        S_AXI_RVALID <= '1';
-        S_AXI_RDATA <= wb_dat_i;
-      elsif state=s_read_finish then
-        S_AXI_RVALID <= '1';
-        S_AXI_RDATA <= read_buffer;
-      end if;
-    end if;
+   
+   if  FAST_READ_TERM and state=s_read and wb_ack_i='1' then
+      S_AXI_RVALID <= '1';
+      S_AXI_RDATA <= wb_dat_i;
+   elsif state=s_read_finish then
+      S_AXI_RVALID <= '1';
+      S_AXI_RDATA <= read_buffer;
+  end if;
+   
 
   end process;
 
@@ -184,6 +195,33 @@ begin
 
   -- AXI State machine
   process(S_AXI_ACLK)
+  
+    procedure process_adr_phase is
+    begin
+      S_AXI_BVALID <= '0';
+     -- process AXI address phase
+     if  S_AXI_ARVALID='1' or ar_taken='1' then
+       stb <= '1';
+       we <= '0';
+       sel <= (others=> '1');
+       state <= s_read;
+
+     elsif aw_taken='1' then
+       if S_AXI_WVALID='1' then
+         sel <= S_AXI_WSTRB;
+         wb_dat_o <= S_AXI_WDATA;
+         stb <= '1';
+         we <= '1';
+         state <= s_write_response;
+       else
+         -- when no valid write channel yet, wait for it
+         state <= s_write;
+       end if;
+     else
+       state <= s_idle;  
+     end if;
+    end procedure; 
+  
   begin
     if rising_edge(S_AXI_ACLK) then
        if S_AXI_ARESETN='0' then
@@ -196,26 +234,27 @@ begin
        else
          case state is
            when s_idle =>
-             S_AXI_BVALID <= '0';
-             -- process AXI address phase
-             if  S_AXI_ARVALID='1' or ar_taken='1' then
-               stb <= '1';
-               we <= '0';
-               sel <= (others=> '1');
-               state <= s_read;
+             process_adr_phase;
+--             S_AXI_BVALID <= '0';
+--             -- process AXI address phase
+--             if  S_AXI_ARVALID='1' or ar_taken='1' then
+--               stb <= '1';
+--               we <= '0';
+--               sel <= (others=> '1');
+--               state <= s_read;
 
-             elsif aw_taken='1' then
-               if S_AXI_WVALID='1' then
-                 sel <= S_AXI_WSTRB;
-                 wb_dat_o <= S_AXI_WDATA;
-                 stb <= '1';
-                 we <= '1';
-                 state <= s_write_response;
-               else
-                 -- when no valid write channel yet, wait for it
-                 state <= s_write;
-               end if;
-             end if;
+--             elsif aw_taken='1' then
+--               if S_AXI_WVALID='1' then
+--                 sel <= S_AXI_WSTRB;
+--                 wb_dat_o <= S_AXI_WDATA;
+--                 stb <= '1';
+--                 we <= '1';
+--                 state <= s_write_response;
+--               else
+--                 -- when no valid write channel yet, wait for it
+--                 state <= s_write;
+--               end if;
+--             end if;
 
            when s_write => -- process "delayed" write channel
              if S_AXI_WVALID='1' then
@@ -245,8 +284,9 @@ begin
            when s_read =>
              if wb_ack_i='1' then
                stb <= '0';
-               -- when AXI side is ready we can terminate AXI cycle now
-               if S_AXI_RREADY='1' then
+               -- when AXI side is ready  
+               --we can terminate AXI cycle now
+               if FAST_READ_TERM and S_AXI_RREADY='1' then
                  state <= s_idle;
                else
                  -- otherwise we must wait
@@ -256,7 +296,7 @@ begin
              end if;
            when s_read_finish =>
              if S_AXI_RREADY='1' then
-               state <= s_idle;
+               process_adr_phase;  
              end if;
          end case;
        end if;
