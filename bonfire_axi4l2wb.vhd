@@ -98,6 +98,7 @@ ATTRIBUTE X_INTERFACE_INFO OF wb_ack_i: SIGNAL IS "bonfire.eu:wb:Wishbone_master
 ATTRIBUTE X_INTERFACE_INFO OF wb_addr_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_adr_o";
 ATTRIBUTE X_INTERFACE_INFO OF wb_dat_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_dat_o";
 ATTRIBUTE X_INTERFACE_INFO OF wb_dat_i: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_dat_i";
+ATTRIBUTE X_INTERFACE_INFO OF wb_sel_o: SIGNAL IS "bonfire.eu:wb:Wishbone_master:1.0 WB_MASTER wb_dbus_sel_o";
 
 
 signal ar_taken : std_logic:='0';
